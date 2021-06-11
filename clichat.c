@@ -6,19 +6,18 @@
 #include <sys/socket.h>
 #include <sys/select.h>
 
-#define BUF_SIZE	1024
-#define	IDLE		0
+#define BUF_SIZE 1024
+#define	IDLE	0
 #define	CHAT_SERVER_DOING	1
 #define	CHAT_CLIENT_DOING	2
 
 // My information Struct
-// state 'e'가 뭔지는 모르겠으나
 typedef struct {
 	char name[20];	// chatting nickname
 	char ip[20];	// my ip
 	int	port;		// chatting TCP server port
-	char statee;	// 0: IDLE   1:CHAT_SERVER_DOING  2:CHAT_CLIENT_DOING
-} MyInfo;
+	char state; 		// 0: IDLE   1:CHAT_SERVER_DOING  2:CHAT_CLIENT_DOING
+}MyInfo;
 
 int mcast_rsocket();
 struct sockaddr_in addr;
@@ -37,29 +36,27 @@ int main(int argc, char *argv[])
 	char mbuf[BUF_SIZE];
 
 	// hearbeat
-	int hb_sock = -1;
+	int hb_sock=-1;
 	struct sockaddr_in hb_addr, from_addr;
-	char ip[20] = { 0, }, cport[5] = {0,};
+	char ip[20]={0,}, cport[5]={0,};
 	int port;
 
 	// tcp server and new client  for chat Server
-	int tcp_servsock, new_clisock = -1, temp_clisock;
+	int tcp_servsock, new_clisock=-1, temp_clisock;
 	struct sockaddr_in tcp_servaddr, cli_addr ;
 
 	// tcp client for chat client
 	int tcp_clisock;
 	struct sockaddr_in tcp_cliaddr;
-	int tcp_clisize = sizeof(tcp_cliaddr);
 
 	// select
-	fd_set 	allfds, readfds;
-	int		fd, maxfd, state;
+	fd_set    readfds, readfds_backup;
+	int fd, maxfd, stat;
 
-	if (argc != 3)
-	{
+	if(argc!=3) {
 		printf("Usage : %s <My IP> <Service PORT>\n", argv[0]);
 		exit(1);
-	}
+	 }
 
 	// keyboard input 
     fd = fileno(stdin);
@@ -67,7 +64,7 @@ int main(int argc, char *argv[])
 	strcpy(myinfo.name , "CAPTAIN");
 	strcpy(myinfo.ip, argv[1]);
 	myinfo.port = atoi(argv[2]);
-	myinfo.statee = IDLE;
+	myinfo.state = IDLE;
 
 	// for mcast receiver	
 	mcast_rcvsock = mcast_rsocket();
@@ -79,48 +76,38 @@ int main(int argc, char *argv[])
 
 	// tcp chatting server socket
     tcp_servsock = socket(PF_INET, SOCK_STREAM, 0);
+
 	
 	// tcp chatting client socket
     tcp_clisock = socket(PF_INET, SOCK_STREAM, 0);
   
 	maxfd = hb_sock; // max socket descriptor
 
-	// 비워 줌
 	FD_ZERO(&readfds);
 
-	// 변화 관찰하고 싶은 애들 다 박아 놓음
-	FD_SET(mcast_rcvsock,	&readfds);
-	FD_SET(hb_sock,			&readfds);
-	FD_SET(tcp_servsock, 	&readfds);
-	FD_SET(tcp_clisock, 	&readfds);
-	FD_SET(fd, 				&readfds);
+	FD_SET(mcast_rcvsock, &readfds);
+	FD_SET(hb_sock, &readfds);
+	FD_SET(tcp_servsock, &readfds);
+	FD_SET(tcp_clisock, &readfds);
+	FD_SET(fd, &readfds);
+	readfds_backup = readfds;
 
-	while (1)
+	while(1)
 	{
-		allfds = readfds;
-		
+		readfds = readfds_backup;
 		memset(mbuf, 0, BUF_SIZE);
-		state = select(maxfd + 1, &allfds, (fd_set *)0, (fd_set *)0, NULL);
-
-		switch (state)
+		stat = select(maxfd + 1, &readfds, (fd_set *)0, (fd_set *)0, NULL);
+		switch(stat)
 		{
 			case -1: //error
-			{
 				exit(1);
-			}
-
 			case 0 : // timeout
-			{
 				exit(1);
 				break;
-			}
-
-			default:
-			{
-				if (FD_ISSET(mcast_rcvsock, &allfds))
-				{
-					recvfrom(mcast_rcvsock, mbuf, BUF_SIZE, 0, (struct sockaddr*)&from_addr, &addr_size);
-
+			default :
+				if (FD_ISSET(mcast_rcvsock, &readfds) ) {
+					recvfrom(mcast_rcvsock, mbuf, BUF_SIZE, 0,
+                                      (struct sockaddr*)&from_addr, &addr_size);
 					// Get CM IP and Port from mbuf
 					strcpy(ip, mbuf);
 					memcpy(cport, &mbuf[20], 4);
@@ -128,117 +115,90 @@ int main(int argc, char *argv[])
 					printf("RCV mbuf> [%s] [%d]\n",ip, port);
 
 					// Address and Port setting
-					hb_addr.sin_addr.s_addr = inet_addr(ip);
-					hb_addr.sin_port = htons(port);
+					hb_addr.sin_addr.s_addr=inet_addr(ip);
+					hb_addr.sin_port=htons(port);
 
 					// send information to CM  
 					memset(msg, 0, BUF_SIZE);
 					memcpy(msg, myinfo.ip, sizeof(myinfo.ip));	
 					sprintf(cport, "%d", myinfo.port); 
 					memcpy(&msg[20], cport, 4); 
-					msg[24] = myinfo.statee;
+					msg[24]= myinfo.state;
+					sendto(hb_sock, msg, BUF_SIZE, 0,
+                             (struct sockaddr*)&hb_addr, sizeof(hb_addr));
 					
-					sendto(hb_sock, msg, BUF_SIZE, 0, (struct sockaddr*)&hb_addr, sizeof(hb_addr));
 				}
 
-				if (FD_ISSET(tcp_servsock, &allfds))
-				{
-					temp_clisock = accept(tcp_servsock, (struct sockaddr *)&tcp_cliaddr, &tcp_clisize); // 클라이언트가 접속하면, accept 함수를 사용해 연결을 수립한다.
-            		printf("Connection from (%s, %d)\n", inet_ntoa(tcp_cliaddr.sin_addr), ntohs(tcp_cliaddr.sin_port));
+				if ( FD_ISSET(tcp_servsock, &readfds) )
+					//temp_clisock = accept(tcp_servsock, );
 
-					if (myinfo.statee == IDLE)
-					{
-						// 클라이언트 가입 수락
+					if ( myinfo.state == IDLE )  {
 						new_clisock = temp_clisock;
-						if (maxfd < new_clisock) maxfd = new_clisock;
-						FD_SET(new_clisock, &readfds);
-						myinfo.statee = CHAT_SERVER_DOING;
+						if ( maxfd < new_clisock ) maxfd = new_clisock;
+						FD_SET(new_clisock, &readfds_backup);
+						myinfo.state = CHAT_SERVER_DOING;
 					}
 					else
 					{
-						// write(temp_clisock ); // send reject msg
+					//	write(temp_clisock ); // send reject msg
 						close(temp_clisock); 
 					}
-				}
-				
-				// RECEIVED NEW MESSAGE.
-				// "recv when start Server chat"
-				if (FD_ISSET(new_clisock, &allfds))
-				{
+					
+	// recv when start Server chat
+				if ( FD_ISSET(new_clisock, &readfds) ) {
 					memset(msg, 0, BUF_SIZE);
-					str_len = read(new_clisock, msg, BUF_SIZE);
-
-					if (str_len <= 0)
-					{
-						FD_CLR(new_clisock, &readfds);
+					str_len = read(new_clisock, msg, BUF_SIZE );
+					if (str_len <= 0 ) {
+						FD_CLR(new_clisock, &readfds_backup);
 						close(new_clisock);
 						new_clisock = -1;
-						myinfo.statee = IDLE;
+						myinfo.state = IDLE;
 					}
 					else
-					{
 						puts(msg);
-					}
 				}
 
-				// "recv when start Client chat"
-				if (FD_ISSET(tcp_clisock, &allfds))
-				{
+	// recv when start  Client chat
+				if ( FD_ISSET(tcp_clisock, &readfds) ) {
 					memset(msg, 0, BUF_SIZE);
-					str_len = read(tcp_clisock, msg, BUF_SIZE);
-					
-					if (str_len <= 0)
-					{
-						myinfo.statee = IDLE;
+					str_len = read(tcp_clisock, msg, BUF_SIZE );
+					if (str_len <= 0 ) {
+						myinfo.state = IDLE;
 					}
 					else
-					{
 						puts(msg);
-					}
 				}
 // recv
-
-// ================================================================ 뭐 표시를 이렇게 하겠다면야
 // ================================================================
-
-// send
-				if (FD_ISSET(fd, &allfds))
-				{
+//  send
+				if ( FD_ISSET(fd, &readfds) ) {
 					memset(buf, 0, 255);
 					fgets(buf, 255, stdin);
-
 					// command mode
-					if (strncmp(buf, "cmd", 3) == 0)
-					{
+					if ( strncmp(buf, "cmd", 3) == 0 ) {
 						printf("CMD> %s",&buf[4]);
 						
 						// add command 
 
 					}
-
 					// chatting mode
-					else if (strncmp(buf, "cht", 3) == 0)
-					{
+					else if ( strncmp(buf, "cht", 3 ) == 0 ) {
 						printf("CHT> %s",&buf[4]);
-						if ( myinfo.statee == CHAT_SERVER_DOING )
-						{
+						if ( myinfo.state == CHAT_SERVER_DOING )
 							write(new_clisock, msg, BUF_SIZE);
-						}
-						else if ( myinfo.statee == CHAT_CLIENT_DOING )
-						{
+						else if ( myinfo.state == CHAT_CLIENT_DOING )
 							write(tcp_clisock, msg, BUF_SIZE);
-						}
 					}
+					
+
 				}
 				break;
-			}
-		}  // SWITCH
-	}  // WHILE
+
+		} // switch end
+	} // while end
 
 	printf(" End Chat Program ======== \n");
-
 	close(hb_sock);
-	
 	return 0;
 }
 
