@@ -152,8 +152,12 @@ int main(int argc, char *argv[])
                 break;
             }
 
+            // 0보다 큰 값 반환: 변화된 값 있음
             default:
             {
+                // 아마도 이거 주석 풀어서 사용하면 될 듯?
+                // recvfrom(hb_sock, buf, BUF_SIZE, 0, (struct sockaddr*)&hbs_addr, sizeof(hbs_addr));
+
                 if (FD_ISSET(serv_sock, &allfds)) {
                     printf("하트비트수신\n");
                 }
