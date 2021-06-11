@@ -268,7 +268,7 @@ int mcast_rsocket()
 	}
 
 	// Specify the multicast Group	
-	join_addr.imr_multiaddr.s_addr=inet_addr("239.0.1.1");
+	join_addr.imr_multiaddr.s_addr=inet_addr("239.0.100.1");
 	// Accept multicast from any interface
 	join_addr.imr_interface.s_addr=htonl(INADDR_ANY);
   

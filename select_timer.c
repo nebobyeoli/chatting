@@ -35,6 +35,7 @@ int main(int argc, char *argv[])
 
     char buf[1024];
     int state;
+    int port;
 
     // TIMEVAL for HEARTBEAT TIMEOUT.
     struct timeval tv;
@@ -62,17 +63,16 @@ int main(int argc, char *argv[])
     serv_sock = socket(PF_INET, SOCK_STREAM, 0)
     if (serv_sock == -1) error_handling("TCP socket() error");
 
-    //// INIT server addresses
+    port = atoi(argv[2]);
 
-    memset(&hbs_addr, 0, sizeof(hbs_addr));
-    hbs_addr.sin_family = AF_INET;
-    hbs_addr.sin_addr.s_addr = inet_addr(INADDR_ANY);
-    hbs_addr.sin_port = htons(atoi(argv[1]));
+    // ip, port 정보 보내는 소켓
+    send_sock = socket(PF_INET, SOCK_DGRAM, 0);
+    memset(&adr, 0, sizeof(adr));
+    sadr.sin_family = AF_INET;
+    sadr.sin_addr.s_addr = inet_addr("239.0.100.1");
+    sadr.sin_port = htons(port);
 
-    memset(&serv_addr, 0, sizeof(serv_addr));
-	serv_addr.sin_family = AF_INET;
-	serv_addr.sin_addr.s_addr = htonl(INADDR_ANY);
-	serv_addr.sin_port = htons(atoi(argv[1]));
+    setsockopt(send_sock, IPPROTO_IP, IP_MULTICAST_TTL, (void *)&time_live, sizeof(time_live));
 
     // JOIN MULTICAST GROUP
     join_addr.imr_multiaddr.s_addr = inet_addr(MULTICAST_ADDR);
@@ -84,7 +84,10 @@ int main(int argc, char *argv[])
     setsockopt(hb_sock, IPPROTO_IP, IP_MULTICAST_LOOP, &on, sizeof(on));    // 루프백 비활성화
     setsockopt(hb_sock, IPPROTO_IP, IP_MULTICAST_TTL, (void *)&time_live, sizeof(time_live));   // TTL 설정
 
-    //// LAUNCH server sockets.
+    memset(&serv_adr, 0, sizeof(serv_adr));
+    serv_adr.sin_family = AF_INET;
+    serv_adr.sin_addr.s_addr = htonl(INADDR_ANY);
+    serv_adr.sin_port = htons(port+1);
 
     int state;
     
@@ -129,39 +132,32 @@ int main(int argc, char *argv[])
 
         switch (state)
         {
-            case -1:
-            {
-                perror("select error : ");
-                exit(0);
-                break;
+        case -1: //error
+            perror("select error : ");
+            exit(0);
+            break;
+        case 0:
+            printf("Time over (3sec)\n");
+
+            memset(buf, 0, sizeof(buf));
+            strcpy(buf, argv[1]);
+            sprintf(&buf[IP_SIZE], "%d", port+1);
+            //udp 메시지 전송
+            if (sendto(send_sock, buf, BUF_SIZE, 0, (struct sockaddr *)&sadr, sizeof(sadr)) != -1){
+                printf("UDP 메시지 전송 성공\n");
             }
 
-            case 0:
+            tv.tv_sec = 3; 
+            tv.tv_usec = 0;
+
+            break;
+        default:
+            if (FD_ISSET(serv_sock, &readfds))
             {
-                printf("Time over (%dsec)\n", tv.tv_sec);
-
-                sprintf(buf, "127.0.0.1");
-                sprintf(&buf[IP_SIZE], "5000");
-                
-                // SEND HEARTBEAT.
-                sendto(hb_sock, buf, BUF_SIZE, 0, (struct sockaddr *)&hbs_addr, sizeof(hbs_addr));
-
-                tv.tv_sec = 2;
-                tv.tv_usec = 0;
-
-                break;
-            }
-
-            // 0보다 큰 값 반환: 변화된 값 있음
-            default:
-            {
-                // 아마도 이거 주석 풀어서 사용하면 될 듯?
-                // recvfrom(hb_sock, buf, BUF_SIZE, 0, (struct sockaddr*)&hbs_addr, sizeof(hbs_addr));
-
-                if (FD_ISSET(serv_sock, &allfds)) {
-                    printf("하트비트수신\n");
-                }
-                break;
+                //하트비트 온거 받는다
+                memset(buf, 0, sizeof(buf));
+                recvfrom(serv_sock, buf, BUF_SIZE, 0,0, 0);
+                printf("하트비트수신 : %s %s\n", buf, &buf[20]);
             }
         }
     }

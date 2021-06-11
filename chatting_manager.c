@@ -55,6 +55,11 @@ int main(int argc, char **argv)
 
     state = 0;
 
+    struct timeval tr;
+
+	tr.tv_sec = 5;
+	tr.tv_usec = 0;
+
     if ((server_sockfd = socket(AF_INET, SOCK_STREAM, 0)) < 0) {
         perror("socket error : ");
         exit(0);
@@ -188,7 +193,8 @@ int main(int argc, char **argv)
          * 변화가 발생한 fds(fd 세트)에 포함된 FD의 개수를
          * state에 저장하는 것이다
          */
-        state = select(maxfd + 1, &allfds, NULL, NULL, NULL);
+
+        state = select(maxfd + 1, &allfds, NULL, NULL, &tr);
 
         // Server Socket - accept from client
         // 클라이언트 연결
