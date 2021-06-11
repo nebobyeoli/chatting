@@ -88,12 +88,12 @@ int main(int argc, char *argv[])
 
     int state;
     
-    state = bind(hb_sock, (struct sockaddr *)&serv_addr, sizeof(serv_addr))
+    state = bind(hb_sock, (struct sockaddr *)&serv_addr, sizeof(serv_addr));
     if (state == -1) error_handling("bind() error");
 
     printf("OPENED UDP SOCKET.\n\n");
 
-    state = bind(serv_sock, (struct sockaddr *)&serv_addr, sizeof(serv_addr))
+    state = bind(serv_sock, (struct sockaddr *)&serv_addr, sizeof(serv_addr));
     if (state == -1) error_handling("TCP bind() error");
 
     state = listen(serv_sock, 5);
