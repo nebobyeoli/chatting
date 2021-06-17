@@ -7,6 +7,12 @@
 #include <sys/select.h>
 
 #define BUF_SIZE 1024
+#define NAME_SIZE 20
+#define IP_SIZE 20
+#define PORT_SIZE 5
+#define STATE_SIZE 1
+
+// state format
 #define	IDLE	0
 #define	CHAT_SERVER_DOING	1
 #define	CHAT_CLIENT_DOING	2
@@ -53,15 +59,15 @@ int main(int argc, char *argv[])
 	fd_set    readfds, readfds_backup;
 	int fd, maxfd, stat;
 
-	if(argc!=3) {
-		printf("Usage : %s <My IP> <Service PORT>\n", argv[0]);
+	if(argc!=4) {
+		printf("Usage : %s <My IP> <Service PORT> <Name>\n", argv[0]);
 		exit(1);
 	 }
 
 	// keyboard input 
     fd = fileno(stdin);
 
-	strcpy(myinfo.name , "CAPTAIN");
+	strcpy(myinfo.name , argv[3]);
 	strcpy(myinfo.ip, argv[1]);
 	myinfo.port = atoi(argv[2]);
 	myinfo.state = IDLE;
@@ -119,11 +125,25 @@ int main(int argc, char *argv[])
 					hb_addr.sin_port=htons(port);
 
 					// send information to CM  
+					/*
+						Heartbeat format
+						char name[20]	// chatting nickname
+						char ip[20] 	// my ip
+						int	port	[5]	// chatting TCP server port
+						char state  [1]	// 0: IDLE   1:CHAT_SERVER_DOING  2:CHAT_CLIENT_DOING
+					*/
 					memset(msg, 0, BUF_SIZE);
+					sprintf(msg, "%s", myinfo.name);
+					sprintf(&msg[NAME_SIZE], "%s", myinfo.ip);
+					sprintf(&msg[NAME_SIZE+IP_SIZE], "%d", myinfo.port);
+					sprintf(&msg[NAME_SIZE+IP_SIZE+PORT_SIZE], "%d", myinfo.state);
+					
+					/*
 					memcpy(msg, myinfo.ip, sizeof(myinfo.ip));	
 					sprintf(cport, "%d", myinfo.port); 
 					memcpy(&msg[20], cport, 4); 
 					msg[24]= myinfo.state;
+					*/
 					sendto(hb_sock, msg, BUF_SIZE, 0,
                              (struct sockaddr*)&hb_addr, sizeof(hb_addr));
 					
